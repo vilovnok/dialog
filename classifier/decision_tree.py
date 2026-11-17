@@ -41,6 +41,8 @@ class DecisionTree:
 
             result.workflow.current_step = active_step
 
+            print(f"Context перед spam check: \n\n{context}\n***\n")
+
             spam_result = self.model.check_spam(context)
 
             result.decisions.spam = StepResult(
