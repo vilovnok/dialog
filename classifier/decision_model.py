@@ -84,13 +84,7 @@ class GigaChatDecisionModel:
 Не добавляй Markdown и текст вне JSON.
 """
 
-        user_prompt = self._serialize_context(
-            context,
-            exclude={
-                "agent_followup",
-                "history_after_followup",
-            },
-        )
+        user_prompt = self._serialize_context(context)
 
         result = self._invoke_json(
             system_prompt,
@@ -150,12 +144,7 @@ class GigaChatDecisionModel:
 Не добавляй Markdown и текст вне JSON.
 """
 
-        user_prompt = self._serialize_context(
-            context,
-            exclude={
-                "history_after_followup",
-            },
-        )
+        user_prompt = self._serialize_context(context)
 
         result = self._invoke_json(
             system_prompt,
@@ -237,21 +226,12 @@ class GigaChatDecisionModel:
     # COMMON METHODS
     # --------------------------------------------------
 
-    @staticmethod
     def _serialize_context(
         context: DialogContext,
-        exclude: set[str] | None = None,
     ) -> str:
-
-        data = context.model_dump(
-            mode="json",
-            exclude=exclude or set(),
-        )
-
-        return json.dumps(
-            data,
-            ensure_ascii=False,
+        return context.model_dump_json(
             indent=2,
+            exclude_none=True,
         )
 
     def _invoke_json(

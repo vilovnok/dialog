@@ -1,3 +1,4 @@
+
 from classifier.schemas import (
     InputData,
     Message,
@@ -5,24 +6,45 @@ from classifier.schemas import (
 )
 
 
-def build_context(input_data: InputData) -> DialogContext:
+def build_context(
+    input_data: InputData,
+    messages_before: int | None = None,
+    messages_after: int | None = 1,
+) -> DialogContext:
     """
-    Формирует контекст диалога для классификации.
+    Формирует контекст диалога относительно целевого сообщения.
 
-    Контекст:
-    1. Все сообщения до целевого сообщения клиента.
-    2. Целевое сообщение клиента.
-    3. Непосредственно следующее сообщение сотрудника.
+    messages_before:
+        None — все сообщения до целевого.
+        0    — не включать сообщения до целевого.
+        N    — включить N ближайших сообщений до целевого.
 
-    Все последующие сообщения игнорируются.
+    messages_after:
+        None — все сообщения после целевого.
+        0    — не включать сообщения после целевого.
+        N    — включить N ближайших сообщений после целевого.
+
+    Целевое сообщение включается всегда.
     """
+
+    # Проверяем настройки контекста.
+    for name, value in (
+        ("messages_before", messages_before),
+        ("messages_after", messages_after),
+    ):
+        if value is not None and (
+            not isinstance(value, int) or value < 0
+        ):
+            raise ValueError(
+                f"{name} должен быть неотрицательным целым числом "
+                "или None."
+            )
 
     messages = input_data.answer
 
-    if len(messages) < 2:
+    if not messages:
         raise ValueError(
-            "Для формирования контекста необходимо "
-            "минимум два сообщения."
+            "Невозможно сформировать контекст: список сообщений пуст."
         )
 
     # Находим целевое сообщение.
@@ -46,20 +68,6 @@ def build_context(input_data: InputData) -> DialogContext:
         raise ValueError(
             "Целевое сообщение должно принадлежать клиенту. "
             f"Получен источник: {target.source}."
-        )
-
-    # Следующее сообщение должно непосредственно следовать за целевым.
-    if target_index + 1 >= len(messages):
-        raise ValueError(
-            "После целевого сообщения отсутствует сообщение агента."
-        )
-
-    followup = messages[target_index + 1]
-
-    if followup.source != "EMPLOYEE":
-        raise ValueError(
-            "Следующее после целевого сообщения должно принадлежать "
-            f"сотруднику. Получен источник: {followup.source}."
         )
 
     # Проверяем принадлежность сообщений одной чат-сессии.
@@ -86,15 +94,38 @@ def build_context(input_data: InputData) -> DialogContext:
             agent=raw_message.agent,
         )
 
-    # В историю включаем только сообщения до целевого.
+    # Определяем границы истории до целевого сообщения.
+    if messages_before is None:
+        before_start = 0
+    else:
+        before_start = max(
+            0,
+            target_index - messages_before,
+        )
+
+    # Определяем границы истории после целевого сообщения.
+    if messages_after is None:
+        after_end = len(messages)
+    else:
+        after_end = min(
+            len(messages),
+            target_index + 1 + messages_after,
+        )
+
+    # Формируем обе части истории.
     history_before_target = [
         convert_message(message)
-        for message in messages[:target_index]
+        for message in messages[before_start:target_index]
+    ]
+
+    history_after_target = [
+        convert_message(message)
+        for message in messages[target_index + 1:after_end]
     ]
 
     return DialogContext(
         session_id=session_id,
         history_before_target=history_before_target,
         target_message=convert_message(target),
-        agent_followup=convert_message(followup),
+        history_after_target=history_after_target,
     )

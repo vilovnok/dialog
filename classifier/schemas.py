@@ -82,20 +82,17 @@ class Message(BaseModel):
 
 
 class DialogContext(BaseModel):
-    """Контекст диалога для классификации."""
-
     session_id: str
 
-    # Все сообщения до целевого сообщения
     history_before_target: list[Message] = Field(
         default_factory=list
     )
 
-    # Целевое сообщение клиента
     target_message: Message
 
-    # Следующее сообщение агента
-    agent_followup: Message
+    history_after_target: list[Message] = Field(
+        default_factory=list
+    )
 
 
 # --------------------------------------------------

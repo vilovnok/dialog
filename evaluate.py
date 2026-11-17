@@ -52,7 +52,11 @@ def process_dialog(
 
     input_data = InputData.model_validate(raw_data)
 
-    context = build_context(input_data)
+    context = build_context(
+        input_data,
+        messages_before=None, 
+        messages_after=None
+    )
 
     result = decision_tree.run(context)
 
