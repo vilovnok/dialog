@@ -30,7 +30,7 @@ CFG = {
     "direct": "~/configs/.ml_config.cfg",
 }
 
-MODEL = "GigaChat-3.5-432B--A28B"
+MODEL = "GigaChat-3.5-432B-A28B"
 
 TEMPERATURE = 0.1
 MAX_TOKENS = None # 512
