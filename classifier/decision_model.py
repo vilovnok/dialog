@@ -121,7 +121,7 @@ class GigaChatDecisionModel:
 """.strip()
 
         user_prompt = self._serialize_spam_context(context)
-        print(f"User prompt для spam check: \n\n{user_prompt}\n***\n")
+        # print(f"User prompt для spam check: \n\n{user_prompt}\n***\n")
 
         result = self._invoke_json(
             system_prompt,
