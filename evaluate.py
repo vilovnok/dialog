@@ -176,6 +176,10 @@ def calculate_metrics(results_df: pd.DataFrame) -> dict[str, Any]:
 
 
 def main() -> None:
+    OUTPUT_PATH.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     # 1. Читаем CSV
     df = pd.read_csv(
