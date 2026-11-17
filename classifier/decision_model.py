@@ -1,4 +1,4 @@
-
+# Хорошо! Теперь мы обновили context_builder.py и теперь можем сами регулировать какое количество сообщений до и после целевого сообщения будет восприниматься моделью. 
 import json
 import re
 from typing import Protocol
@@ -225,7 +225,7 @@ class GigaChatDecisionModel:
     # --------------------------------------------------
     # COMMON METHODS
     # --------------------------------------------------
-
+    @staticmethod
     def _serialize_context(
         context: DialogContext,
     ) -> str:
