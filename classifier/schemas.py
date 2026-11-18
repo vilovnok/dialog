@@ -99,6 +99,13 @@ class DialogContext(BaseModel):
 # CLASSIFICATION RESULTS
 # --------------------------------------------------
 
+class QuestionsConsecutiveResult(BaseModel):
+    decision: Literal[
+        "questions_consecutive",
+        "not_questions_consecutive",
+    ]
+    reason: str
+
 class DecisionResult(BaseModel):
     decision: Literal[
         "spam",
@@ -132,6 +139,9 @@ class StepResult(BaseModel):
 class WorkflowDecisions(BaseModel):
     spam: StepResult = Field(default_factory=StepResult)
     file: StepResult = Field(default_factory=StepResult)
+    questions_consecutive: StepResult = Field(
+        default_factory=StepResult
+    )
     correct: StepResult = Field(default_factory=StepResult)
     category: StepResult = Field(default_factory=StepResult)
 

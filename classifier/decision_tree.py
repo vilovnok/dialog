@@ -1,7 +1,7 @@
-
 from classifier.categories import (
     CORRECT_CATEGORY,
     FILE_CATEGORY,
+    QUESTIONS_CONSECUTIVE_CATEGORY,
     is_valid_category,
 )
 
@@ -13,7 +13,9 @@ from classifier.schemas import (
 )
 
 from classifier.file_detector import check_file
-
+from classifier.questions_consecutive_detector import (
+    has_consecutive_client_messages,
+)
 
 from classifier.decision_model import (
     DecisionModel,
@@ -62,6 +64,11 @@ class DecisionTree:
                     reason="Проверка категории «Файл» не выполнялась: сообщение определено как спам.",
                 )
 
+                result.decisions.questions_consecutive = StepResult(
+                    status="skipped",
+                    reason="Проверка категории «Вопросы подряд» не выполнялась: сообщение определено как спам.",
+                )
+
                 result.decisions.correct = StepResult(
                     status="skipped",
                     reason="Сообщение определено как спам.",
@@ -98,6 +105,11 @@ class DecisionTree:
 
                 result.label = FILE_CATEGORY
 
+                result.decisions.questions_consecutive = StepResult(
+                    status="skipped",
+                    reason="Проверка категории «Вопросы подряд» не выполнялась: обращение отнесено к категории «Файл».",
+                )
+
                 result.decisions.correct = StepResult(
                     status="skipped",
                     reason="Обращение отнесено к категории «Файл».",
@@ -111,7 +123,55 @@ class DecisionTree:
                 return self._finish(result)
 
             # --------------------------------------------------
-            # 3. CORRECT CHECK
+            # 3. QUESTIONS CONSECUTIVE CHECK
+            # --------------------------------------------------
+
+            active_step = "questions_consecutive_check"
+            result.workflow.current_step = active_step
+
+            has_consecutive = has_consecutive_client_messages(context)
+
+            if not has_consecutive:
+
+                result.decisions.questions_consecutive = StepResult(
+                    status="skipped",
+                    reason=(
+                        "Структурное условие не выполнено: "
+                        "непосредственно следующее после целевого "
+                        "сообщение не принадлежит CLIENT."
+                    ),
+                )
+
+            else:
+
+                questions_result = self.model.check_questions_consecutive(
+                    context
+                )
+
+                result.decisions.questions_consecutive = StepResult(
+                    status="completed",
+                    label=questions_result.decision,
+                    reason=questions_result.reason,
+                )
+
+                if questions_result.decision == "questions_consecutive":
+
+                    result.label = QUESTIONS_CONSECUTIVE_CATEGORY
+
+                    result.decisions.correct = StepResult(
+                        status="skipped",
+                        reason="Обращение отнесено к категории «Вопросы подряд».",
+                    )
+
+                    result.decisions.category = StepResult(
+                        status="skipped",
+                        reason="Классификация категории не выполнялась.",
+                    )
+
+                    return self._finish(result)
+
+            # --------------------------------------------------
+            # 4. CORRECT CHECK
             # --------------------------------------------------
 
             active_step = "correct_check"
@@ -137,7 +197,7 @@ class DecisionTree:
                 return self._finish(result)
 
             # --------------------------------------------------
-            # 4. CATEGORY CLASSIFICATION
+            # 5. CATEGORY CLASSIFICATION
             # --------------------------------------------------
 
             active_step = "category_classification"
@@ -221,6 +281,9 @@ class DecisionTree:
 
         elif step == "file_check":
             result.decisions.file = failed_result
+
+        elif step == "questions_consecutive_check":
+            result.decisions.questions_consecutive = failed_result
 
         elif step == "correct_check":
             result.decisions.correct = failed_result
