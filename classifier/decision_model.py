@@ -394,10 +394,10 @@ class GigaChatDecisionModel:
 
 Верни результат строго в формате JSON:
 
-{
+{{
     "decision": "questions_consecutive",
     "reason": "Краткое объяснение решения"
-}
+}}
 
 Допустимые значения поля `decision`:
 
