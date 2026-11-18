@@ -131,6 +131,7 @@ class StepResult(BaseModel):
 
 class WorkflowDecisions(BaseModel):
     spam: StepResult = Field(default_factory=StepResult)
+    file: StepResult = Field(default_factory=StepResult)
     correct: StepResult = Field(default_factory=StepResult)
     category: StepResult = Field(default_factory=StepResult)
 

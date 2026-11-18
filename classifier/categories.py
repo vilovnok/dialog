@@ -325,7 +325,7 @@ SPECIAL_CATEGORIES = {
     "Вопросы подряд",
 }
 
-
+FILE_CATEGORY = "Файл"
 OTHER_CATEGORY = "Другое"
 CORRECT_CATEGORY = "correct"
 

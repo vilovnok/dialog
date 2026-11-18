@@ -1,16 +1,19 @@
 
 from classifier.categories import (
     CORRECT_CATEGORY,
+    FILE_CATEGORY,
     is_valid_category,
 )
 
 from classifier.schemas import (
     DialogContext,
-    DecisionResult,
     CategoryResult,
     StepResult,
     WorkflowResult,
 )
+
+from classifier.file_detector import check_file
+
 
 from classifier.decision_model import (
     DecisionModel,
@@ -41,8 +44,6 @@ class DecisionTree:
 
             result.workflow.current_step = active_step
 
-            # print(f"Context перед spam check: \n\n{context}\n***\n")
-
             spam_result = self.model.check_spam(context)
 
             result.decisions.spam = StepResult(
@@ -55,6 +56,11 @@ class DecisionTree:
 
                 result.spam = True
                 result.workflow.spam = True
+
+                result.decisions.file = StepResult(
+                    status="skipped",
+                    reason="Проверка категории «Файл» не выполнялась: сообщение определено как спам.",
+                )
 
                 result.decisions.correct = StepResult(
                     status="skipped",
@@ -69,7 +75,43 @@ class DecisionTree:
                 return self._finish(result)
 
             # --------------------------------------------------
-            # 2. CORRECT CHECK
+            # 2. FILE CHECK
+            # --------------------------------------------------
+
+            active_step = "file_check"
+            result.workflow.current_step = active_step
+
+            is_file = check_file(context)
+
+            result.decisions.file = StepResult(
+                status="completed",
+                label=FILE_CATEGORY if is_file else "not_file",
+                reason=(
+                    "Обнаружен дефис в целевом сообщении "
+                    "или в непосредственно следующем сообщении клиента."
+                    if is_file
+                    else "Условия определения категории «Файл» не выполнены."
+                ),
+            )
+
+            if is_file:
+
+                result.label = FILE_CATEGORY
+
+                result.decisions.correct = StepResult(
+                    status="skipped",
+                    reason="Обращение отнесено к категории «Файл».",
+                )
+
+                result.decisions.category = StepResult(
+                    status="skipped",
+                    reason="Классификация категории не выполнялась.",
+                )
+
+                return self._finish(result)
+
+            # --------------------------------------------------
+            # 3. CORRECT CHECK
             # --------------------------------------------------
 
             active_step = "correct_check"
@@ -95,7 +137,7 @@ class DecisionTree:
                 return self._finish(result)
 
             # --------------------------------------------------
-            # 3. CATEGORY CLASSIFICATION
+            # 4. CATEGORY CLASSIFICATION
             # --------------------------------------------------
 
             active_step = "category_classification"
@@ -176,6 +218,9 @@ class DecisionTree:
 
         if step == "spam_check":
             result.decisions.spam = failed_result
+
+        elif step == "file_check":
+            result.decisions.file = failed_result
 
         elif step == "correct_check":
             result.decisions.correct = failed_result
