@@ -20,7 +20,7 @@ import requests
 from crowd_sdk.tagme import TagmeClientAdvanced
 
 
-PROVIDER = "direct" # "aihf" # aihf direct
+PROVIDER = "aihf" # aihf direct
 
 ENDPOINTS = {
     "direct": "https://tagme.sberdevices.ru/ai/llm/v1/chat/completions",
@@ -32,7 +32,7 @@ CFG = {
     "aihf": "~/configs/.ml_config.cfg",
 }
 
-MODEL = "GigaChat-3.5-432B-A28B"  # "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
+MODEL = "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
 
 TEMPERATURE = 0.1
 MAX_TOKENS = 8000 # 512
