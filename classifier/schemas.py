@@ -94,6 +94,11 @@ class DialogContext(BaseModel):
         default_factory=list
     )
 
+    # Информация о непосредственных соседях target
+    # в исходном диалоге, независимо от размера контекста.
+    has_previous_client_message: bool = False
+    has_next_client_message: bool = False
+
 
 # --------------------------------------------------
 # CLASSIFICATION RESULTS

@@ -159,8 +159,9 @@ class DecisionTree:
                 status="skipped",
                 reason=(
                     "Структурное условие не выполнено: "
-                    "непосредственно предыдущее и следующее "
-                    "сообщения не принадлежат CLIENT."
+                    "целевое сообщение не принадлежит CLIENT "
+                    "или непосредственно соседние сообщения "
+                    "не принадлежат CLIENT."
                 ),
             )
 
@@ -225,35 +226,26 @@ class DecisionTree:
     # QUESTIONS CONSECUTIVE DETECTION
     # --------------------------------------------------
 
+
     @staticmethod
     def _has_consecutive_client_messages(
         context: DialogContext,
     ) -> bool:
         """
-        Проверяет, есть ли непосредственно рядом с целевым
-        сообщением другое сообщение клиента.
+        Проверяет, соседствует ли целевое сообщение клиента
+        с другим сообщением клиента в исходном диалоге.
 
-        Проверяются только ближайшие сообщения:
-        - последнее сообщение history_before_target;
-        - первое сообщение history_after_target.
-
-        Целевое сообщение также должно принадлежать CLIENT.
+        Информация о соседних сообщениях определяется
+        в context_builder.py независимо от размера контекста.
         """
 
         if context.target_message.source != "CLIENT":
             return False
 
-        previous_is_client = (
-            bool(context.history_before_target)
-            and context.history_before_target[-1].source == "CLIENT"
+        return (
+            context.has_previous_client_message
+            or context.has_next_client_message
         )
-
-        next_is_client = (
-            bool(context.history_after_target)
-            and context.history_after_target[0].source == "CLIENT"
-        )
-
-        return previous_is_client or next_is_client
 
     # --------------------------------------------------
     # VALIDATION

@@ -25,6 +25,8 @@ def build_context(
         N    — включить N ближайших сообщений после целевого.
 
     Целевое сообщение включается всегда.
+    Информация о непосредственных соседях target
+    определяется независимо от размера контекста.
     """
 
     # Проверяем настройки контекста.
@@ -79,6 +81,18 @@ def build_context(
                 "Обнаружены сообщения из разных чат-сессий."
             )
 
+    # Проверяем непосредственных соседей target
+    # в исходном диалоге, не учитывая настройки окна контекста.
+    has_previous_client_message = (
+        target_index > 0
+        and messages[target_index - 1].source == "CLIENT"
+    )
+
+    has_next_client_message = (
+        target_index + 1 < len(messages)
+        and messages[target_index + 1].source == "CLIENT"
+    )
+
     def convert_message(raw_message) -> Message:
         if not raw_message.request_id:
             raise ValueError(
@@ -128,4 +142,6 @@ def build_context(
         history_before_target=history_before_target,
         target_message=convert_message(target),
         history_after_target=history_after_target,
+        has_previous_client_message=has_previous_client_message,
+        has_next_client_message=has_next_client_message,
     )
