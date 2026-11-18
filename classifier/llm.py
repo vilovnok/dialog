@@ -20,7 +20,7 @@ import requests
 from crowd_sdk.tagme import TagmeClientAdvanced
 
 
-PROVIDER = "direct" # aihf
+PROVIDER = "aihf" # aihf direct
 
 ENDPOINTS = {
     "direct": "https://tagme.sberdevices.ru/ai/llm/v1/chat/completions",
