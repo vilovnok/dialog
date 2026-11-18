@@ -1,3 +1,4 @@
+
 from classifier.categories import (
     CORRECT_CATEGORY,
     FILE_CATEGORY,
@@ -13,9 +14,6 @@ from classifier.schemas import (
 )
 
 from classifier.file_detector import check_file
-from classifier.questions_consecutive_detector import (
-    has_consecutive_client_messages,
-)
 
 from classifier.decision_model import (
     DecisionModel,
@@ -94,8 +92,7 @@ class DecisionTree:
                 status="completed",
                 label=FILE_CATEGORY if is_file else "not_file",
                 reason=(
-                    "Обнаружен дефис в целевом сообщении "
-                    "или в непосредственно следующем сообщении клиента."
+                    "Обнаружен признак категории «Файл»."
                     if is_file
                     else "Условия определения категории «Файл» не выполнены."
                 ),
@@ -129,46 +126,43 @@ class DecisionTree:
             active_step = "questions_consecutive_check"
             result.workflow.current_step = active_step
 
-            has_consecutive = has_consecutive_client_messages(context)
+            has_consecutive = self._has_consecutive_client_messages(
+                context
+            )
 
-            if not has_consecutive:
-
-                result.decisions.questions_consecutive = StepResult(
-                    status="skipped",
-                    reason=(
-                        "Структурное условие не выполнено: "
-                        "непосредственно следующее после целевого "
-                        "сообщение не принадлежит CLIENT."
-                    ),
-                )
-
-            else:
-
-                questions_result = self.model.check_questions_consecutive(
-                    context
-                )
+            if has_consecutive:
 
                 result.decisions.questions_consecutive = StepResult(
                     status="completed",
-                    label=questions_result.decision,
-                    reason=questions_result.reason,
+                    label="questions_consecutive",
+                    reason=(
+                        "Целевое сообщение клиента непосредственно "
+                        "соседствует с другим сообщением клиента."
+                    ),
                 )
 
-                if questions_result.decision == "questions_consecutive":
+                result.label = QUESTIONS_CONSECUTIVE_CATEGORY
 
-                    result.label = QUESTIONS_CONSECUTIVE_CATEGORY
+                result.decisions.correct = StepResult(
+                    status="skipped",
+                    reason="Обращение отнесено к категории «Вопросы подряд».",
+                )
 
-                    result.decisions.correct = StepResult(
-                        status="skipped",
-                        reason="Обращение отнесено к категории «Вопросы подряд».",
-                    )
+                result.decisions.category = StepResult(
+                    status="skipped",
+                    reason="Классификация категории не выполнялась.",
+                )
 
-                    result.decisions.category = StepResult(
-                        status="skipped",
-                        reason="Классификация категории не выполнялась.",
-                    )
+                return self._finish(result)
 
-                    return self._finish(result)
+            result.decisions.questions_consecutive = StepResult(
+                status="skipped",
+                reason=(
+                    "Структурное условие не выполнено: "
+                    "непосредственно предыдущее и следующее "
+                    "сообщения не принадлежат CLIENT."
+                ),
+            )
 
             # --------------------------------------------------
             # 4. CORRECT CHECK
@@ -226,6 +220,40 @@ class DecisionTree:
             )
 
             raise
+
+    # --------------------------------------------------
+    # QUESTIONS CONSECUTIVE DETECTION
+    # --------------------------------------------------
+
+    @staticmethod
+    def _has_consecutive_client_messages(
+        context: DialogContext,
+    ) -> bool:
+        """
+        Проверяет, есть ли непосредственно рядом с целевым
+        сообщением другое сообщение клиента.
+
+        Проверяются только ближайшие сообщения:
+        - последнее сообщение history_before_target;
+        - первое сообщение history_after_target.
+
+        Целевое сообщение также должно принадлежать CLIENT.
+        """
+
+        if context.target_message.source != "CLIENT":
+            return False
+
+        previous_is_client = (
+            bool(context.history_before_target)
+            and context.history_before_target[-1].source == "CLIENT"
+        )
+
+        next_is_client = (
+            bool(context.history_after_target)
+            and context.history_after_target[0].source == "CLIENT"
+        )
+
+        return previous_is_client or next_is_client
 
     # --------------------------------------------------
     # VALIDATION

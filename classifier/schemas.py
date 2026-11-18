@@ -99,13 +99,6 @@ class DialogContext(BaseModel):
 # CLASSIFICATION RESULTS
 # --------------------------------------------------
 
-class QuestionsConsecutiveResult(BaseModel):
-    decision: Literal[
-        "questions_consecutive",
-        "not_questions_consecutive",
-    ]
-    reason: str
-
 class DecisionResult(BaseModel):
     decision: Literal[
         "spam",

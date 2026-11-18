@@ -8,7 +8,6 @@ from classifier.schemas import (
     DialogContext,
     DecisionResult,
     CategoryResult,
-    QuestionsConsecutiveResult
 )
 from classifier.categories import (
     AGENT_CATEGORIES,
@@ -53,12 +52,7 @@ class DecisionModel(Protocol):
         context: DialogContext,
     ) -> CategoryResult:
         ...
-    
-    def check_questions_consecutive(
-        self,
-        context: DialogContext,
-    ) -> QuestionsConsecutiveResult:
-        ...
+
 
 
 class GigaChatDecisionModel:
