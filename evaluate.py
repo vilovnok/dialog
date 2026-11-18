@@ -1,6 +1,10 @@
 
+import argparse
 import json
 import logging
+import threading
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +29,9 @@ GOLDEN_COLUMN = "GOLDEN:agent"
 
 LOG_EVERY = 10
 
+# Локальное хранилище объектов для каждого потока.
+worker_local = threading.local()
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,7 +41,49 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_target_message_id(data: dict[str, Any]) -> str | None:
+# --------------------------------------------------
+# WORKER INITIALIZATION
+# --------------------------------------------------
+
+def get_worker_decision_tree() -> DecisionTree:
+    """
+    Возвращает DecisionTree текущего потока.
+
+    При первом вызове в потоке создаёт собственные:
+    - GigaChatClient;
+    - GigaChatDecisionModel;
+    - DecisionTree.
+
+    При последующих вызовах использует уже созданные объекты.
+    """
+
+    if not hasattr(worker_local, "decision_tree"):
+
+        llm_client = GigaChatClient()
+
+        decision_model = GigaChatDecisionModel(
+            client=llm_client,
+        )
+
+        worker_local.decision_tree = DecisionTree(
+            model=decision_model,
+        )
+
+        logger.info(
+            "Создан DecisionTree для потока %s",
+            threading.current_thread().name,
+        )
+
+    return worker_local.decision_tree
+
+
+# --------------------------------------------------
+# INPUT PROCESSING
+# --------------------------------------------------
+
+def get_target_message_id(
+    data: dict[str, Any],
+) -> str | None:
     """Извлекает ID целевого сообщения из исходного JSON."""
 
     for message in data.get("answer", []):
@@ -54,8 +103,8 @@ def process_dialog(
 
     context = build_context(
         input_data,
-        messages_before=None, 
-        messages_after=None
+        messages_before=None,
+        messages_after=None,
     )
 
     result = decision_tree.run(context)
@@ -63,12 +112,16 @@ def process_dialog(
     return result.model_dump(mode="json")
 
 
+# --------------------------------------------------
+# ROW EVALUATION
+# --------------------------------------------------
+
 def evaluate_row(
     row: pd.Series,
     decision_tree: DecisionTree,
     row_index: int,
 ) -> dict[str, Any]:
-    """Обрабатывает одну строку датасета и формирует результат."""
+    """Обрабатывает одну строку датасета."""
 
     golden = row.get(GOLDEN_COLUMN)
     filename = row.get("FILENAME")
@@ -80,15 +133,20 @@ def evaluate_row(
         "golden": golden,
         "prediction": None,
         "is_correct": None,
+
         "spam": None,
         "spam_label": None,
         "spam_reason": None,
+
+        "questions_consecutive_label": None,
+        "questions_consecutive_reason": None,
+
         "correct_label": None,
         "correct_reason": None,
+
         "category_label": None,
         "category_reason": None,
-        "questions_consecutive_label": None,
-"questions_consecutive_reason": None,
+
         "workflow_status": "failed",
         "error": None,
     }
@@ -96,24 +154,37 @@ def evaluate_row(
     try:
         raw_data = json.loads(row[INPUT_COLUMN])
 
-        result["message_id"] = get_target_message_id(raw_data)
+        result["message_id"] = get_target_message_id(
+            raw_data
+        )
 
         workflow_result = process_dialog(
             raw_data=raw_data,
             decision_tree=decision_tree,
         )
 
+        decisions = workflow_result["decisions"]
+
         result.update({
             "prediction": workflow_result["label"],
             "spam": workflow_result["spam"],
-            "spam_label": workflow_result["decisions"]["spam"]["label"],
-            "spam_reason": workflow_result["decisions"]["spam"]["reason"],
-            "correct_label": workflow_result["decisions"]["correct"]["label"],
-            "correct_reason": workflow_result["decisions"]["correct"]["reason"],
-            "category_label": workflow_result["decisions"]["category"]["label"],
-            "category_reason": workflow_result["decisions"]["category"]["reason"],
-            "questions_consecutive_label": workflow_result["decisions"]["questions_consecutive"]["label"],
-            "questions_consecutive_reason": workflow_result["decisions"]["questions_consecutive"]["reason"],
+
+            "spam_label": decisions["spam"]["label"],
+            "spam_reason": decisions["spam"]["reason"],
+
+            "questions_consecutive_label": (
+                decisions["questions_consecutive"]["label"]
+            ),
+            "questions_consecutive_reason": (
+                decisions["questions_consecutive"]["reason"]
+            ),
+
+            "correct_label": decisions["correct"]["label"],
+            "correct_reason": decisions["correct"]["reason"],
+
+            "category_label": decisions["category"]["label"],
+            "category_reason": decisions["category"]["reason"],
+
             "workflow_status": workflow_result["workflow"]["status"],
         })
 
@@ -134,7 +205,33 @@ def evaluate_row(
     return result
 
 
-def calculate_metrics(results_df: pd.DataFrame) -> dict[str, Any]:
+def evaluate_row_parallel(
+    row: pd.Series,
+    row_index: int,
+) -> dict[str, Any]:
+    """
+    Обрабатывает строку в текущем потоке.
+
+    DecisionTree автоматически создаётся при первом
+    обращении к нему в каждом потоке.
+    """
+
+    decision_tree = get_worker_decision_tree()
+
+    return evaluate_row(
+        row=row,
+        decision_tree=decision_tree,
+        row_index=row_index,
+    )
+
+
+# --------------------------------------------------
+# METRICS
+# --------------------------------------------------
+
+def calculate_metrics(
+    results_df: pd.DataFrame,
+) -> dict[str, Any]:
     """Рассчитывает основные метрики классификации."""
 
     total = len(results_df)
@@ -151,7 +248,9 @@ def calculate_metrics(results_df: pd.DataFrame) -> dict[str, Any]:
         predicted["golden"].notna()
     ]
 
-    correct_count = int(comparable["is_correct"].sum())
+    correct_count = int(
+        comparable["is_correct"].sum()
+    )
 
     accuracy = (
         correct_count / len(comparable)
@@ -183,13 +282,53 @@ def calculate_metrics(results_df: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+# --------------------------------------------------
+# ARGUMENTS
+# --------------------------------------------------
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Параллельная оценка диалогов через LLM."
+    )
+
+    parser.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=1,
+        help="Количество параллельных воркеров (по умолчанию: 1).",
+    )
+
+    args = parser.parse_args()
+
+    if args.workers < 1:
+        parser.error("--workers должен быть не меньше 1.")
+
+    return args
+
+
+# --------------------------------------------------
+# MAIN
+# --------------------------------------------------
+
 def main() -> None:
+
+    args = parse_args()
+
+    workers = args.workers
+
     OUTPUT_PATH.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
+    METRICS_PATH.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     # 1. Читаем CSV
+
     df = pd.read_csv(
         INPUT_PATH,
         encoding="utf-8-sig",
@@ -206,55 +345,88 @@ def main() -> None:
             f"Не найден столбец {GOLDEN_COLUMN}"
         )
 
-    logger.info("Загружено строк: %s", len(df))
+    total_rows = len(df)
 
-    # 2. Создаём LLM-клиент один раз
-    llm_client = GigaChatClient()
+    logger.info("Загружено строк: %s", total_rows)
+    logger.info("Количество воркеров: %s", workers)
 
-    decision_model = GigaChatDecisionModel(
-        client=llm_client,
-    )
+    # 2. Подготавливаем хранилище результатов.
+    # Индекс списка соответствует исходному индексу строки.
 
-    decision_tree = DecisionTree(
-        model=decision_model,
-    )
+    results = [None] * total_rows
 
-    # 3. Последовательно обрабатываем датасет
-    results = []
+    # 3. Запускаем параллельную обработку.
 
-    for index, row in df.iterrows():
+    with ThreadPoolExecutor(
+        max_workers=workers,
+        thread_name_prefix="llm-worker",
+    ) as executor:
 
-        result = evaluate_row(
-            row=row,
-            decision_tree=decision_tree,
-            row_index=index,
-        )
+        futures = {
+            executor.submit(
+                evaluate_row_parallel,
+                row,
+                position,
+            ): position
 
-        results.append(result)
-
-        processed = len(results)
-
-        if processed % LOG_EVERY == 0 or processed == len(df):
-            logger.info(
-                "Обработано %s/%s",
-                processed,
-                len(df),
+            for position, (_, row) in enumerate(
+                df.iterrows()
             )
+        }
 
-            # Промежуточное сохранение
-            pd.DataFrame(results).to_csv(
-                OUTPUT_PATH,
-                index=False,
-                encoding="utf-8-sig",
-            )
+        completed = 0
 
-    # 4. Сохраняем итоговую таблицу
+        for future in as_completed(futures):
+
+            position = futures[future]
+
+            try:
+                results[position] = future.result()
+
+            except Exception as exc:
+                logger.exception(
+                    "Необработанная ошибка строки %s",
+                    position,
+                )
+
+                results[position] = {
+                    "row_index": position,
+                    "workflow_status": "failed",
+                    "error": str(exc),
+                }
+
+            completed += 1
+
+            if (
+                completed % LOG_EVERY == 0
+                or completed == total_rows
+            ):
+
+                logger.info(
+                    "Обработано %s/%s",
+                    completed,
+                    total_rows,
+                )
+
+                # Сохраняем только уже завершённые строки.
+                completed_results = [
+                    item
+                    for item in results
+                    if item is not None
+                ]
+
+                pd.DataFrame(
+                    completed_results
+                ).to_csv(
+                    OUTPUT_PATH,
+                    index=False,
+                    encoding="utf-8-sig",
+                )
+
+    # 4. Итоговое сохранение.
+    # Порядок результатов соответствует исходному датасету.
+
     results_df = pd.DataFrame(results)
-
-    OUTPUT_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
     results_df.to_csv(
         OUTPUT_PATH,
@@ -262,7 +434,8 @@ def main() -> None:
         encoding="utf-8-sig",
     )
 
-    # 5. Рассчитываем метрики
+    # 5. Рассчитываем метрики.
+
     metrics = calculate_metrics(results_df)
 
     METRICS_PATH.write_text(
@@ -275,14 +448,10 @@ def main() -> None:
     )
 
     logger.info("Обработка завершена.")
-    logger.info(
-        "Accuracy: %s",
-        metrics["accuracy"],
-    )
-    logger.info(
-        "Результаты: %s",
-        OUTPUT_PATH,
-    )
+    logger.info("Accuracy: %s", metrics["accuracy"])
+    logger.info("Workers: %s", workers)
+    logger.info("Результаты: %s", OUTPUT_PATH)
+    logger.info("Метрики: %s", METRICS_PATH)
 
 
 if __name__ == "__main__":
