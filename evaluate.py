@@ -14,7 +14,7 @@ from classifier.context_builder import build_context
 
 
 INPUT_PATH = Path(
-    "/home/work/22850885@sigma.sbrf.ru/project/workplaces/tagme_balanced_small_dataset.csv"
+    "/home/work/22850885@sigma.sbrf.ru/project/workplaces/data/tagme_balanced_small_dataset.csv"
 )
 
 OUTPUT_PATH = Path("data/evaluation_results.csv")
