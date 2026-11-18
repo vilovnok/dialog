@@ -20,19 +20,21 @@ import requests
 from crowd_sdk.tagme import TagmeClientAdvanced
 
 
-PROVIDER = "aihf" # aihf direct
+PROVIDER = "vsellm" # aihf direct
 
 ENDPOINTS = {
     "direct": "https://tagme.sberdevices.ru/ai/llm/v1/chat/completions",
     "aihf": "https://tagme.sberdevices.ru/x/aihf/llm/v1/chat/completions",
+    "vsellm": "https://tagme.sberdevices.ru/x/ai/llm/v1/chat/completions",
 }
 
 CFG = {
     "direct": "~/configs/.ml_config.cfg",
     "aihf": "~/configs/.ml_config.cfg",
+    "vsellm": "~/configs/.ml_config.cfg",
 }
 
-MODEL = "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
+MODEL = "openai/gpt-5.6-luna" # "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
 
 TEMPERATURE = 0.1
 MAX_TOKENS = 8000 # 512
