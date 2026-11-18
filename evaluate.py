@@ -87,6 +87,8 @@ def evaluate_row(
         "correct_reason": None,
         "category_label": None,
         "category_reason": None,
+        "questions_consecutive_label": None,
+"questions_consecutive_reason": None,
         "workflow_status": "failed",
         "error": None,
     }
@@ -110,6 +112,8 @@ def evaluate_row(
             "correct_reason": workflow_result["decisions"]["correct"]["reason"],
             "category_label": workflow_result["decisions"]["category"]["label"],
             "category_reason": workflow_result["decisions"]["category"]["reason"],
+            "questions_consecutive_label": workflow_result["decisions"]["questions_consecutive"]["label"],
+            "questions_consecutive_reason": workflow_result["decisions"]["questions_consecutive"]["reason"],
             "workflow_status": workflow_result["workflow"]["status"],
         })
 
