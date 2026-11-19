@@ -20,7 +20,7 @@ import requests
 from crowd_sdk.tagme import TagmeClientAdvanced
 
 
-PROVIDER = "vsellm" # aihf direct
+PROVIDER = "aihf" # "vsellm" # aihf direct
 
 ENDPOINTS = {
     "direct": "https://tagme.sberdevices.ru/ai/llm/v1/chat/completions",
@@ -34,10 +34,10 @@ CFG = {
     "vsellm": "~/configs/.ml_config.cfg",
 }
 
-MODEL = "openai/gpt-5.6-luna" # "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
+MODEL = "DeepSeek-V4.1-Flash" # "openai/gpt-5.6-luna" # "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
 
 TEMPERATURE = 0.1
-MAX_TOKENS = 8000 # 512
+MAX_TOKENS = 8400 # 512
 TIMEOUT = (60, 180)
 
 
