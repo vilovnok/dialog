@@ -1,6 +1,7 @@
-
 import json
 import pandas as pd
+
+from config import INPUT_PATH, INPUT_COLUMN
 
 from classifier.schemas import InputData
 from classifier.context_builder import build_context
@@ -10,18 +11,23 @@ from classifier.decision_tree import DecisionTree
 
 
 def process_dialog(data: dict) -> dict:
-    # 1. Валидация исходных данных
     input_data = InputData.model_validate(data)
 
-    # 2. Формирование контекста
-    context = build_context(input_data)
+    context = build_context(
+        input_data,
+        messages_before=None,
+        messages_after=None,
+    )
 
-    # 3. Инициализация модели
     llm_client = GigaChatClient()
-    decision_model = GigaChatDecisionModel(client=llm_client)
 
-    # 4. Запуск дерева решений
-    decision_tree = DecisionTree(model=decision_model)
+    decision_model = GigaChatDecisionModel(
+        client=llm_client,
+    )
+
+    decision_tree = DecisionTree(
+        model=decision_model,
+    )
 
     result = decision_tree.run(context)
 
@@ -30,21 +36,34 @@ def process_dialog(data: dict) -> dict:
 
 def main():
     df = pd.read_csv(
-        "/Users/richardgurtsiev/Desktop/projects/vibe_code/workspaces/data/tagme_balanced_small_dataset.csv",
+        INPUT_PATH,
         encoding="utf-8-sig",
         dtype=str,
     )
 
-    # Берём первую запись
+    if INPUT_COLUMN not in df.columns:
+        raise ValueError(
+            f"Не найден столбец {INPUT_COLUMN}"
+        )
+
+    if df.empty:
+        raise ValueError("Датасет пуст.")
+
     row = df.iloc[0]
 
-    # Извлекаем JSON из INPUT:input
-    input_data = json.loads(row["INPUT:input"])
+    input_data = json.loads(
+        row[INPUT_COLUMN]
+    )
 
-    # Запускаем классификацию
     result = process_dialog(input_data)
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            result,
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

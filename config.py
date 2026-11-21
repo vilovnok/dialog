@@ -1,17 +1,37 @@
-
 from pathlib import Path
 
 
-# GigaChat connection
-GIGACHAT_BASE_URL = "https://gigachat-ift.sberdevices.delta.sbrf.ru/v1"
-GIGACHAT_MODEL = "Qwen3.5-397b"
 
-CA_BUNDLE_FILE = Path("/path/to/serv.pem")
-CERT_FILE = Path("/path/to/client.pem")
-KEY_FILE = Path("/path/to/client.key")
+ENDPOINTS = {
+    "direct": "https://tagme.sberdevices.ru/ai/llm/v1/chat/completions",
+    "aihf": "https://tagme.sberdevices.ru/x/aihf/llm/v1/chat/completions",
+    "vsellm": "https://tagme.sberdevices.ru/x/ai/llm/v1/chat/completions",
+}
 
-# Generation parameters
+CFG_PATHS = {
+    "direct": "~/configs/.ml_config.cfg",
+    "aihf": "~/configs/.ml_config.cfg",
+    "vsellm": "~/configs/.ml_config.cfg",
+}
+
+
+MODEL = "DeepSeek-V4.1-Flash"
+PROVIDER = "aihf" 
+VERIFY_SSL = False
+
 TEMPERATURE = 0.0
-TIMEOUT = 600
-REPETITION_PENALTY = 1.05
-MAX_RETRIES = 0
+MAX_TOKENS = 8000
+TIMEOUT = (60, 120)
+
+INPUT_PATH = Path(
+    "data/tagme_balanced_small_dataset.csv"
+)
+
+OUTPUT_DIR = Path("data/evaluation")
+
+INPUT_COLUMN = "INPUT:input"
+GOLDEN_COLUMN = "GOLDEN:agent"
+FILENAME_COLUMN = "FILENAME"
+
+LOG_EVERY = 10
+SAVE_EVERY = 10
