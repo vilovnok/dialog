@@ -3,6 +3,7 @@
 logs/
 # data/*.csv
 
+data/evaluation_results_correct.csv                
 data/ground_truth_dataset.csv                
 data/task_bank.csv
 data/evaluation_results.csv                  
