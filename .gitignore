@@ -1,7 +1,13 @@
 # Working zone — local only, do not commit
 .context/
 logs/
-data/*.csv
+# data/*.csv
+
+data/ground_truth_dataset.csv                
+data/task_bank.csv
+data/evaluation_results.csv                  
+data/tagme_balanced_small_dataset.csv
+
 data/*.ipynb
 
 # Python
