@@ -338,7 +338,6 @@ class DecisionTree:
     def _normalize_label(label: str) -> str:
         return label.strip().replace("ё", "е").replace("Ё", "Е")
 
-
     @staticmethod
     def _validate_category(
         category: CategoryResult,
