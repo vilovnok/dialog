@@ -973,7 +973,7 @@ class GigaChatDecisionModel:
         context: DialogContext,
     ) -> CategoryResult:
 
-        system_prompt = f"""
+        system_prompt = """
 # РОЛЬ
 
 Ты — эксперт по классификации обращений клиентов банковской организации.
