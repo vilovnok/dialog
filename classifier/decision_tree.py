@@ -335,31 +335,39 @@ class DecisionTree:
     # --------------------------------------------------
 
     @staticmethod
+    def _normalize_label(label: str) -> str:
+        return label.strip().replace("ё", "е").replace("Ё", "Е")
+
+
+    @staticmethod
     def _validate_category(
         category: CategoryResult,
         expected_type: str,
     ) -> None:
+
+        category_type = category.category_type.strip()
+        label = DecisionTree._normalize_label(category.label)
 
         allowed_types = {
             expected_type,
             "other",
         }
 
-        if category.category_type not in allowed_types:
+        if category_type not in allowed_types:
             raise ValueError(
                 "Классификатор вернул категорию неправильного типа: "
                 f"expected={expected_type} или other, "
-                f"actual={category.category_type}, "
+                f"actual={category_type}, "
                 f"label={category.label}"
             )
 
         if not is_valid_category(
-            category_type=category.category_type,
-            label=category.label,
+            category_type=category_type,
+            label=label,
         ):
             raise ValueError(
-                "Модель вернула недопустимую категорию: "
-                f"type={category.category_type}, "
+                "Модель вернула неизвестную категорию: "
+                f"type={category_type}, "
                 f"label={category.label}"
             )
 
