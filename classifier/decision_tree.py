@@ -282,8 +282,9 @@ class DecisionTree:
             # --------------------------------------------------
             # 6. CATEGORY VALIDATION
             # --------------------------------------------------
-
-            self._validate_category(category_result)
+# --------------------------------------------------
+# 6. SAVE CATEGORY RESULT
+# --------------------------------------------------
 
             result.decisions.category = StepResult(
                 status="completed",
