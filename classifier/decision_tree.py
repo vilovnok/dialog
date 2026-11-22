@@ -345,7 +345,7 @@ class DecisionTree:
     ) -> None:
 
         category_type = category.category_type.strip()
-        label = DecisionTree._normalize_label(category.label)
+        category.label = DecisionTree._normalize_label(category.label)
 
         allowed_types = {
             expected_type,
@@ -362,7 +362,7 @@ class DecisionTree:
 
         if not is_valid_category(
             category_type=category_type,
-            label=label,
+            label=category.label,
         ):
             raise ValueError(
                 "Модель вернула неизвестную категорию: "
