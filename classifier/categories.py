@@ -327,13 +327,13 @@ def is_valid_category(
     label: str,
 ) -> bool:
 
+    if category_type == "other":
+        return label == OTHER_CATEGORY
+
     if category_type == "agent":
         return label in AGENT_CATEGORIES
 
     if category_type == "special":
         return label in SPECIAL_CATEGORIES
-
-    if category_type == "other":
-        return label == OTHER_CATEGORY
 
     return False
