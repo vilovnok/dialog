@@ -340,10 +340,15 @@ class DecisionTree:
         expected_type: str,
     ) -> None:
 
-        if category.category_type != expected_type:
+        allowed_types = {
+            expected_type,
+            "other",
+        }
+
+        if category.category_type not in allowed_types:
             raise ValueError(
                 "Классификатор вернул категорию неправильного типа: "
-                f"expected={expected_type}, "
+                f"expected={expected_type} или other, "
                 f"actual={category.category_type}, "
                 f"label={category.label}"
             )
