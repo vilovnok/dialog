@@ -1,0 +1,22 @@
+_32 | _01
+_21 | _11 
+_16 | _12
+cb_gigachat_11_business_card_commission | cb_gigachat_11_business_card_transactions
+_11 | _28
+cb_gigachat_11_business_card_commission | cb_gigachat_21_business_card_limits
+cb_gigachat_08_sberbusiness | cb_gigachat_11_business_card_transactions
+cb_gigachat_27_rid_kv_edo_fl | Другое
+cb_gigachat_10_payments | cb_gigachat_06_salary_project
+cb_gigachat_05_business_credit_card | cb_gigachat_11_business_card_transactions
+cb_gigachat_13_main_deposits | cb_gigachat_12_bank_account_restrictions
+cb_gigachat_32_legal_case_changes | cb_gigachat_01_right_to_sign_supervisor
+cb_gigachat_08_sberbusiness | cb_gigachat_10_payments
+cb_gigachat_14_references | cb_gigachat_12_bank_account_restrictions
+cb_gigachat_11_business_card_transactions | cb_gigachat_05_business_credit_card
+cb_gigachat_11_business_card_transactions | cb_gigachat_10_payments
+
+
+---
+
+
+
