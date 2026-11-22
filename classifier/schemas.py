@@ -104,6 +104,7 @@ class DialogContext(BaseModel):
 # CLASSIFICATION RESULTS
 # --------------------------------------------------
 
+
 class DecisionResult(BaseModel):
     decision: Literal[
         "spam",
@@ -111,6 +112,13 @@ class DecisionResult(BaseModel):
         "correct",
         "no_correct",
     ]
+
+    category_group: Literal[
+        "agent",
+        "special",
+        "no",
+    ] = "no"
+
     reason: str
 
 
@@ -122,6 +130,31 @@ class CategoryResult(BaseModel):
     ]
     label: str
     reason: str
+
+
+
+class SpamResult(BaseModel):
+    decision: Literal[
+        "spam",
+        "not_spam",
+    ]
+    reason: str
+
+
+class CorrectResult(BaseModel):
+    decision: Literal[
+        "correct",
+        "no_correct",
+    ]
+
+    category_group: Literal[
+        "agent",
+        "special",
+        "no",
+    ]
+
+    reason: str
+
 
 
 # --------------------------------------------------

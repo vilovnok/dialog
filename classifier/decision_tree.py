@@ -3,6 +3,7 @@ from classifier.categories import (
     CORRECT_CATEGORY,
     FILE_CATEGORY,
     QUESTIONS_CONSECUTIVE_CATEGORY,
+    OTHER_CATEGORY,
     is_valid_category,
 )
 
@@ -59,12 +60,18 @@ class DecisionTree:
 
                 result.decisions.file = StepResult(
                     status="skipped",
-                    reason="Проверка категории «Файл» не выполнялась: сообщение определено как спам.",
+                    reason=(
+                        "Проверка категории «Файл» не выполнялась: "
+                        "сообщение определено как спам."
+                    ),
                 )
 
                 result.decisions.questions_consecutive = StepResult(
                     status="skipped",
-                    reason="Проверка категории «Вопросы подряд» не выполнялась: сообщение определено как спам.",
+                    reason=(
+                        "Проверка категории «Вопросы подряд» "
+                        "не выполнялась: сообщение определено как спам."
+                    ),
                 )
 
                 result.decisions.correct = StepResult(
@@ -94,7 +101,10 @@ class DecisionTree:
                 reason=(
                     "Обнаружен признак категории «Файл»."
                     if is_file
-                    else "Условия определения категории «Файл» не выполнены."
+                    else (
+                        "Условия определения категории «Файл» "
+                        "не выполнены."
+                    )
                 ),
             )
 
@@ -104,7 +114,11 @@ class DecisionTree:
 
                 result.decisions.questions_consecutive = StepResult(
                     status="skipped",
-                    reason="Проверка категории «Вопросы подряд» не выполнялась: обращение отнесено к категории «Файл».",
+                    reason=(
+                        "Проверка категории «Вопросы подряд» "
+                        "не выполнялась: обращение отнесено "
+                        "к категории «Файл»."
+                    ),
                 )
 
                 result.decisions.correct = StepResult(
@@ -145,7 +159,10 @@ class DecisionTree:
 
                 result.decisions.correct = StepResult(
                     status="skipped",
-                    reason="Обращение отнесено к категории «Вопросы подряд».",
+                    reason=(
+                        "Обращение отнесено к категории "
+                        "«Вопросы подряд»."
+                    ),
                 )
 
                 result.decisions.category = StepResult(
@@ -180,7 +197,16 @@ class DecisionTree:
                 reason=correct_result.reason,
             )
 
+            # Проверяем согласованность decision и category_group.
+
             if correct_result.decision == "correct":
+
+                if correct_result.category_group != "no":
+                    raise ValueError(
+                        "Для decision='correct' "
+                        "category_group должен быть 'no'. "
+                        f"Получено: {correct_result.category_group}"
+                    )
 
                 result.label = CORRECT_CATEGORY
 
@@ -191,14 +217,71 @@ class DecisionTree:
 
                 return self._finish(result)
 
+            elif correct_result.decision == "no_correct":
+
+                if correct_result.category_group not in (
+                    "agent",
+                    "special",
+                    "no",
+                ):
+                    raise ValueError(
+                        "Для decision='no_correct' необходимо указать "
+                        "category_group: agent, special или no. "
+                        f"Получено: {correct_result.category_group}"
+                    )
+
             # --------------------------------------------------
-            # 5. CATEGORY CLASSIFICATION
+            # 5. CATEGORY GROUP ROUTING
             # --------------------------------------------------
 
-            active_step = "category_classification"
-            result.workflow.current_step = active_step
+            if correct_result.category_group == "agent":
 
-            category_result = self.model.classify_category(context)
+                active_step = "agent_classification"
+                result.workflow.current_step = active_step
+
+                category_result = self.model.classify_agent(context)
+
+                self._validate_category(
+                    category_result,
+                    expected_type="agent",
+                )
+
+            elif correct_result.category_group == "special":
+
+                active_step = "special_classification"
+                result.workflow.current_step = active_step
+
+                category_result = self.model.classify_special(context)
+
+                self._validate_category(
+                    category_result,
+                    expected_type="special",
+                )
+
+            elif correct_result.category_group == "no":
+
+                result.label = OTHER_CATEGORY
+
+                result.decisions.category = StepResult(
+                    status="completed",
+                    label=OTHER_CATEGORY,
+                    reason=(
+                        "Предмет обращения не относится "
+                        "ни к одной группе классификации."
+                    ),
+                )
+
+                return self._finish(result)
+
+            else:
+                raise ValueError(
+                    "Модель вернула неизвестную группу классификации: "
+                    f"{correct_result.category_group}"
+                )
+
+            # --------------------------------------------------
+            # 6. CATEGORY VALIDATION
+            # --------------------------------------------------
 
             self._validate_category(category_result)
 
@@ -225,7 +308,6 @@ class DecisionTree:
     # --------------------------------------------------
     # QUESTIONS CONSECUTIVE DETECTION
     # --------------------------------------------------
-
 
     @staticmethod
     def _has_consecutive_client_messages(
@@ -254,7 +336,16 @@ class DecisionTree:
     @staticmethod
     def _validate_category(
         category: CategoryResult,
+        expected_type: str,
     ) -> None:
+
+        if category.category_type != expected_type:
+            raise ValueError(
+                "Классификатор вернул категорию неправильного типа: "
+                f"expected={expected_type}, "
+                f"actual={category.category_type}, "
+                f"label={category.label}"
+            )
 
         if not is_valid_category(
             category_type=category.category_type,
@@ -308,5 +399,8 @@ class DecisionTree:
         elif step == "correct_check":
             result.decisions.correct = failed_result
 
-        elif step == "category_classification":
+        elif step in (
+            "agent_classification",
+            "special_classification",
+        ):
             result.decisions.category = failed_result
