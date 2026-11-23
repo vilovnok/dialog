@@ -1,4 +1,3 @@
-
 import argparse
 import json
 import logging
@@ -15,6 +14,11 @@ from classifier.decision_model import GigaChatDecisionModel
 from classifier.decision_tree import DecisionTree
 from classifier.schemas import InputData
 from classifier.context_builder import build_context
+from classifier.categories import (
+    FILE_CATEGORY,
+    QUESTIONS_CONSECUTIVE_CATEGORY,
+    CORRECT_CATEGORY,
+)
 
 
 INPUT_PATH = Path(
@@ -29,7 +33,6 @@ GOLDEN_COLUMN = "GOLDEN:agent"
 
 LOG_EVERY = 10
 
-# Локальное хранилище объектов для каждого потока.
 worker_local = threading.local()
 
 
@@ -46,16 +49,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------
 
 def get_worker_decision_tree() -> DecisionTree:
-    """
-    Возвращает DecisionTree текущего потока.
-
-    При первом вызове в потоке создаёт собственные:
-    - GigaChatClient;
-    - GigaChatDecisionModel;
-    - DecisionTree.
-
-    При последующих вызовах использует уже созданные объекты.
-    """
+    """Возвращает DecisionTree текущего потока."""
 
     if not hasattr(worker_local, "decision_tree"):
 
@@ -84,7 +78,7 @@ def get_worker_decision_tree() -> DecisionTree:
 def get_target_message_id(
     data: dict[str, Any],
 ) -> str | None:
-    """Извлекает ID целевого сообщения из исходного JSON."""
+    """Извлекает ID целевого сообщения."""
 
     for message in data.get("answer", []):
         if str(message.get("Ключ для разметки")) == "1":
@@ -97,7 +91,7 @@ def process_dialog(
     raw_data: dict[str, Any],
     decision_tree: DecisionTree,
 ) -> dict[str, Any]:
-    """Обрабатывает один диалог через DecisionTree."""
+    """Обрабатывает диалог через DecisionTree."""
 
     input_data = InputData.model_validate(raw_data)
 
@@ -110,6 +104,89 @@ def process_dialog(
     result = decision_tree.run(context)
 
     return result.model_dump(mode="json")
+
+
+# --------------------------------------------------
+# DECISION ANALYSIS
+# --------------------------------------------------
+
+def get_step(
+    decisions: dict[str, Any],
+    step_name: str,
+) -> dict[str, Any]:
+    """Безопасно возвращает результат отдельного этапа."""
+
+    return decisions.get(step_name) or {}
+
+
+def get_final_source(
+    workflow_result: dict[str, Any],
+) -> str:
+    """
+    Определяет этап, который сформировал итоговую категорию.
+
+    Приоритет соответствует логике DecisionTree:
+    spam -> file -> questions_consecutive -> correct -> category.
+    """
+
+    decisions = workflow_result.get("decisions", {})
+    final_label = workflow_result.get("label")
+
+    if workflow_result.get("spam"):
+        return "spam"
+
+    file_step = get_step(decisions, "file")
+
+    if (
+        file_step.get("status") == "completed"
+        and final_label == FILE_CATEGORY
+    ):
+        return "file"
+
+    questions_step = get_step(
+        decisions,
+        "questions_consecutive",
+    )
+
+    if (
+        questions_step.get("status") == "completed"
+        and final_label == QUESTIONS_CONSECUTIVE_CATEGORY
+    ):
+        return "questions_consecutive"
+
+    correct_step = get_step(decisions, "correct")
+
+    if (
+        correct_step.get("status") == "completed"
+        and final_label == CORRECT_CATEGORY
+    ):
+        return "correct"
+
+    return "category"
+
+
+def get_final_reason(
+    workflow_result: dict[str, Any],
+    final_source: str,
+) -> str | None:
+    """Возвращает причину выбора итоговой категории."""
+
+    decisions = workflow_result.get("decisions", {})
+
+    step = get_step(decisions, final_source)
+
+    return step.get("reason")
+
+
+def get_category_type(
+    workflow_result: dict[str, Any],
+) -> str | None:
+    """Извлекает тип результата классификации категории."""
+
+    decisions = workflow_result.get("decisions", {})
+    category_step = get_step(decisions, "category")
+
+    return category_step.get("category_type")
 
 
 # --------------------------------------------------
@@ -130,23 +207,44 @@ def evaluate_row(
         "row_index": row_index,
         "message_id": None,
         "filename": filename,
+
+        # Эталон и итоговый прогноз
         "golden": golden,
         "prediction": None,
         "is_correct": None,
 
+        # Источник итогового решения
+        "final_source": None,
+        "final_reason": None,
+
+        # Spam
         "spam": None,
+        "spam_status": None,
         "spam_label": None,
         "spam_reason": None,
 
+        # File
+        "file_status": None,
+        "file_label": None,
+        "file_reason": None,
+
+        # Questions consecutive
+        "questions_consecutive_status": None,
         "questions_consecutive_label": None,
         "questions_consecutive_reason": None,
 
+        # Correct
+        "correct_status": None,
         "correct_label": None,
         "correct_reason": None,
 
+        # Category
+        "category_status": None,
+        "category_type": None,
         "category_label": None,
         "category_reason": None,
 
+        # Общий статус
         "workflow_status": "failed",
         "error": None,
     }
@@ -163,29 +261,73 @@ def evaluate_row(
             decision_tree=decision_tree,
         )
 
-        decisions = workflow_result["decisions"]
+        decisions = workflow_result.get("decisions", {})
 
+        spam_step = get_step(decisions, "spam")
+        file_step = get_step(decisions, "file")
+
+        questions_step = get_step(
+            decisions,
+            "questions_consecutive",
+        )
+
+        correct_step = get_step(decisions, "correct")
+        category_step = get_step(decisions, "category")
+
+        # Определяем этап, который сформировал итоговую категорию.
+        final_source = get_final_source(workflow_result)
+
+        # Сохраняем результаты всех этапов.
         result.update({
-            "prediction": workflow_result["label"],
-            "spam": workflow_result["spam"],
 
-            "spam_label": decisions["spam"]["label"],
-            "spam_reason": decisions["spam"]["reason"],
+            # Итоговый результат
+            "prediction": workflow_result.get("label"),
+            "spam": workflow_result.get("spam"),
 
+            "final_source": final_source,
+            "final_reason": get_final_reason(
+                workflow_result,
+                final_source,
+            ),
+
+            # Spam
+            "spam_status": spam_step.get("status"),
+            "spam_label": spam_step.get("label"),
+            "spam_reason": spam_step.get("reason"),
+
+            # File
+            "file_status": file_step.get("status"),
+            "file_label": file_step.get("label"),
+            "file_reason": file_step.get("reason"),
+
+            # Questions consecutive
+            "questions_consecutive_status": (
+                questions_step.get("status")
+            ),
             "questions_consecutive_label": (
-                decisions["questions_consecutive"]["label"]
+                questions_step.get("label")
             ),
             "questions_consecutive_reason": (
-                decisions["questions_consecutive"]["reason"]
+                questions_step.get("reason")
             ),
 
-            "correct_label": decisions["correct"]["label"],
-            "correct_reason": decisions["correct"]["reason"],
+            # Correct
+            "correct_status": correct_step.get("status"),
+            "correct_label": correct_step.get("label"),
+            "correct_reason": correct_step.get("reason"),
 
-            "category_label": decisions["category"]["label"],
-            "category_reason": decisions["category"]["reason"],
+            # Category
+            "category_status": category_step.get("status"),
+            "category_type": get_category_type(
+                workflow_result
+            ),
+            "category_label": category_step.get("label"),
+            "category_reason": category_step.get("reason"),
 
-            "workflow_status": workflow_result["workflow"]["status"],
+            # Workflow
+            "workflow_status": (
+                workflow_result.get("workflow", {}).get("status")
+            ),
         })
 
         if pd.notna(golden) and result["prediction"] is not None:
@@ -209,12 +351,7 @@ def evaluate_row_parallel(
     row: pd.Series,
     row_index: int,
 ) -> dict[str, Any]:
-    """
-    Обрабатывает строку в текущем потоке.
-
-    DecisionTree автоматически создаётся при первом
-    обращении к нему в каждом потоке.
-    """
+    """Обрабатывает строку в текущем потоке."""
 
     decision_tree = get_worker_decision_tree()
 
@@ -258,6 +395,20 @@ def calculate_metrics(
         else None
     )
 
+    # Распределение источников итоговых решений.
+    final_source_counts = (
+        results_df["final_source"]
+        .value_counts(dropna=False)
+        .to_dict()
+    )
+
+    # Распределение предсказанных категорий.
+    prediction_counts = (
+        results_df["prediction"]
+        .value_counts(dropna=False)
+        .to_dict()
+    )
+
     return {
         "total_rows": total,
         "completed_rows": len(successful),
@@ -279,6 +430,8 @@ def calculate_metrics(
             if total > 0
             else None
         ),
+        "final_source_distribution": final_source_counts,
+        "prediction_distribution": prediction_counts,
     }
 
 
@@ -314,7 +467,6 @@ def parse_args():
 def main() -> None:
 
     args = parse_args()
-
     workers = args.workers
 
     OUTPUT_PATH.parent.mkdir(
@@ -350,12 +502,11 @@ def main() -> None:
     logger.info("Загружено строк: %s", total_rows)
     logger.info("Количество воркеров: %s", workers)
 
-    # 2. Подготавливаем хранилище результатов.
-    # Индекс списка соответствует исходному индексу строки.
+    # 2. Подготавливаем результаты.
 
     results = [None] * total_rows
 
-    # 3. Запускаем параллельную обработку.
+    # 3. Параллельная обработка.
 
     with ThreadPoolExecutor(
         max_workers=workers,
@@ -408,7 +559,6 @@ def main() -> None:
                     total_rows,
                 )
 
-                # Сохраняем только уже завершённые строки.
                 completed_results = [
                     item
                     for item in results
@@ -424,7 +574,6 @@ def main() -> None:
                 )
 
     # 4. Итоговое сохранение.
-    # Порядок результатов соответствует исходному датасету.
 
     results_df = pd.DataFrame(results)
 
@@ -434,7 +583,7 @@ def main() -> None:
         encoding="utf-8-sig",
     )
 
-    # 5. Рассчитываем метрики.
+    # 5. Метрики.
 
     metrics = calculate_metrics(results_df)
 
@@ -443,6 +592,7 @@ def main() -> None:
             metrics,
             ensure_ascii=False,
             indent=2,
+            default=str,
         ),
         encoding="utf-8",
     )
@@ -450,6 +600,10 @@ def main() -> None:
     logger.info("Обработка завершена.")
     logger.info("Accuracy: %s", metrics["accuracy"])
     logger.info("Workers: %s", workers)
+    logger.info(
+        "Источники решений: %s",
+        metrics["final_source_distribution"],
+    )
     logger.info("Результаты: %s", OUTPUT_PATH)
     logger.info("Метрики: %s", METRICS_PATH)
 
