@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import threading
+import time
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -33,6 +34,10 @@ GOLDEN_COLUMN = "GOLDEN:agent"
 
 LOG_EVERY = 10
 
+# Повторные попытки обработки одного примера.
+MAX_RETRIES = 3
+RETRY_DELAYS = (2, 4)  # секунды перед 2-й и 3-й попытками
+
 worker_local = threading.local()
 
 
@@ -48,11 +53,15 @@ logger = logging.getLogger(__name__)
 # WORKER INITIALIZATION
 # --------------------------------------------------
 
-def get_worker_decision_tree() -> DecisionTree:
-    """Возвращает DecisionTree текущего потока."""
+def get_worker_decision_tree(force_new: bool = False) -> DecisionTree:
+    """Возвращает DecisionTree текущего потока.
 
-    if not hasattr(worker_local, "decision_tree"):
+    force_new=True создаёт новый клиент и дерево решений.
+    Это используется после сетевой ошибки, чтобы повтор не шёл
+    через потенциально повреждённое соединение.
+    """
 
+    if force_new or not hasattr(worker_local, "decision_tree"):
         llm_client = GigaChatClient()
 
         decision_model = GigaChatDecisionModel(
@@ -64,7 +73,8 @@ def get_worker_decision_tree() -> DecisionTree:
         )
 
         logger.info(
-            "Создан DecisionTree для потока %s",
+            "Создан%s DecisionTree для потока %s",
+            " заново" if force_new else "",
             threading.current_thread().name,
         )
 
@@ -247,6 +257,7 @@ def evaluate_row(
         # Общий статус
         "workflow_status": "failed",
         "error": None,
+        "attempts": 1,
     }
 
     try:
@@ -351,15 +362,86 @@ def evaluate_row_parallel(
     row: pd.Series,
     row_index: int,
 ) -> dict[str, Any]:
-    """Обрабатывает строку в текущем потоке."""
+    """Обрабатывает строку с повторными попытками при ошибках."""
 
-    decision_tree = get_worker_decision_tree()
+    last_result: dict[str, Any] | None = None
 
-    return evaluate_row(
-        row=row,
-        decision_tree=decision_tree,
-        row_index=row_index,
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            # После первой неудачи создаём новый клиент и DecisionTree.
+            decision_tree = get_worker_decision_tree(
+                force_new=(attempt > 1),
+            )
+
+            row_result = evaluate_row(
+                row=row,
+                decision_tree=decision_tree,
+                row_index=row_index,
+            )
+            row_result["attempts"] = attempt
+            last_result = row_result
+
+            # Успешно обработанный пример повторно не отправляем.
+            if (
+                row_result.get("error") is None
+                and row_result.get("workflow_status") == "completed"
+            ):
+                if attempt > 1:
+                    logger.info(
+                        "Строка %s успешно обработана с попытки %s/%s",
+                        row_index,
+                        attempt,
+                        MAX_RETRIES,
+                    )
+                return row_result
+
+            error_message = (
+                row_result.get("error")
+                or f"workflow_status={row_result.get('workflow_status')}"
+            )
+
+        except Exception as exc:
+            # На случай ошибки вне evaluate_row().
+            error_message = str(exc)
+            logger.exception(
+                "Ошибка запуска обработки строки %s, попытка %s/%s",
+                row_index,
+                attempt,
+                MAX_RETRIES,
+            )
+            last_result = {
+                "row_index": row_index,
+                "workflow_status": "failed",
+                "error": error_message,
+                "attempts": attempt,
+            }
+
+        if attempt < MAX_RETRIES:
+            delay = RETRY_DELAYS[attempt - 1]
+            logger.warning(
+                "Строка %s завершилась ошибкой (попытка %s/%s): %s. "
+                "Повтор через %s сек.",
+                row_index,
+                attempt,
+                MAX_RETRIES,
+                error_message,
+                delay,
+            )
+            time.sleep(delay)
+
+    logger.error(
+        "Строка %s не обработана после %s попыток. Последняя ошибка: %s",
+        row_index,
+        MAX_RETRIES,
+        (last_result or {}).get("error"),
     )
+
+    return last_result or {
+        "row_index": row_index,
+        "workflow_status": "failed",
+        "error": "Не удалось получить результат обработки",
+        "attempts": MAX_RETRIES,
+    }
 
 
 # --------------------------------------------------
