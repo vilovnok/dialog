@@ -2,6 +2,7 @@
 .context/
 logs/
 # data/*.csv
+trash/*
 
 data/evaluation_results_correct.csv                
 data/ground_truth_dataset.csv                
