@@ -1,26 +1,9 @@
-from langchain_gigachat.chat_models import GigaChat
-
-from config import (
-    CA_BUNDLE_FILE,
-    CERT_FILE,
-    KEY_FILE,
-    GIGACHAT_BASE_URL,
-    GIGACHAT_MODEL,
-    TEMPERATURE,
-    TIMEOUT,
-    REPETITION_PENALTY,
-    MAX_RETRIES,
-)
-
-
 
 import os
 import requests
 
 from crowd_sdk.tagme import TagmeClientAdvanced
 
-
-PROVIDER = "aihf" # aihf direct
 
 ENDPOINTS = {
     "direct": "https://tagme.sberdevices.ru/ai/llm/v1/chat/completions",
@@ -32,26 +15,42 @@ CFG = {
     "aihf": "~/configs/.ml_config.cfg",
 }
 
-MODEL = "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
-
-TEMPERATURE = 0.1
-TOP_P = 1.0
-MAX_TOKENS = 8000 # 512
+DEFAULT_MODEL = "DeepSeek-V4.1-Flash"
+DEFAULT_TEMPERATURE = 0.2
+DEFAULT_TOP_P = 1.0
+MAX_TOKENS = 8000
 TIMEOUT = (60, 180)
 
 
 class GigaChatClient:
 
-    def __init__(self):
-        self.url = ENDPOINTS[PROVIDER]
-        self.model = MODEL
+    def __init__(
+        self,
+        provider: str = "aihf",
+        model: str = DEFAULT_MODEL,
+        temperature: float = DEFAULT_TEMPERATURE,
+        top_p: float = DEFAULT_TOP_P,
+    ):
+        if provider not in ENDPOINTS:
+            raise ValueError(
+                f"Неизвестный provider: {provider}. "
+                f"Допустимые значения: {list(ENDPOINTS)}"
+            )
+
+        self.provider = provider
+        self.url = ENDPOINTS[provider]
+        self.model = model
+        self.temperature = temperature
+        self.top_p = top_p
+
         self.token = self._get_token()
 
         self.session = requests.Session()
 
-    @staticmethod
-    def _get_token() -> str:
-        cfg_path = os.path.expanduser(CFG[PROVIDER])
+    def _get_token(self) -> str:
+        cfg_path = os.path.expanduser(
+            CFG[self.provider]
+        )
 
         client = TagmeClientAdvanced(cfg_path)
 
@@ -75,10 +74,10 @@ class GigaChatClient:
                     "content": user_prompt,
                 },
             ],
-            "temperature": TEMPERATURE,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
             "max_tokens": MAX_TOKENS,
             "profanity_check": False,
-            "top_p": TOP_P,
         }
 
         headers = {
@@ -94,10 +93,12 @@ class GigaChatClient:
             timeout=TIMEOUT,
         )
 
-        # Если токен истёк, обновляем его и повторяем запрос один раз.
+        # Обновляем токен при истечении срока действия.
         if response.status_code == 401:
             self.token = self._get_token()
-            headers["Authorization"] = f"Bearer {self.token}"
+            headers["Authorization"] = (
+                f"Bearer {self.token}"
+            )
 
             response = self.session.post(
                 self.url,
@@ -110,7 +111,6 @@ class GigaChatClient:
         response.raise_for_status()
 
         data = response.json()
-
         choices = data.get("choices") or []
 
         if not choices:

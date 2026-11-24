@@ -149,19 +149,27 @@ def save_run_metadata(
 # --------------------------------------------------
 
 def get_worker_decision_tree(
+    provider: str,
+    model_name: str,
+    temperature: float | None,
+    top_p: float | None,
     force_new: bool = False,
 ) -> DecisionTree:
-    """Возвращает DecisionTree текущего потока.
-
-    force_new=True создаёт новый клиент и дерево решений.
-    Используется после ошибки предыдущей попытки.
-    """
 
     if (
         force_new
         or not hasattr(worker_local, "decision_tree")
     ):
-        llm_client = GigaChatClient()
+        llm_client = GigaChatClient(
+            provider=provider,
+            model=model_name,
+            temperature=(
+                temperature if temperature is not None else 0.1
+            ),
+            top_p=(
+                top_p if top_p is not None else 1.0
+            ),
+        )
 
         decision_model = GigaChatDecisionModel(
             client=llm_client,
@@ -172,9 +180,12 @@ def get_worker_decision_tree(
         )
 
         logger.info(
-            "Создан%s DecisionTree для потока %s",
+            "Создан%s DecisionTree для потока %s | "
+            "provider=%s | model=%s",
             " заново" if force_new else "",
             threading.current_thread().name,
+            provider,
+            model_name,
         )
 
     return worker_local.decision_tree
@@ -466,6 +477,10 @@ def evaluate_row_parallel(
     row: pd.Series,
     row_index: int,
     run_id: str,
+    provider: str,
+    model_name: str,
+    temperature: float | None,
+    top_p: float | None,
 ) -> dict[str, Any]:
     """Обрабатывает строку с повторными попытками."""
 
@@ -475,6 +490,10 @@ def evaluate_row_parallel(
 
         try:
             decision_tree = get_worker_decision_tree(
+                provider=provider,
+                model_name=model_name,
+                temperature=temperature,
+                top_p=top_p,
                 force_new=(attempt > 1),
             )
 
@@ -686,7 +705,7 @@ def parse_args():
     parser.add_argument(
         "--provider",
         type=str,
-        choices=["auth", "direct"],
+        choices=["aihf", "direct"],
         required=True,
         help="Способ подключения к API: auth или direct.",
     )
@@ -841,6 +860,10 @@ def main() -> None:
                     row,
                     position,
                     run_id,
+                    args.provider,
+                    args.model_name,
+                    args.temperature,
+                    args.top_p,
                 ): position
 
                 for position, (_, row) in enumerate(
@@ -941,8 +964,16 @@ def main() -> None:
             "run_id": run_id,
             "model_name": args.model_name,
             "provider": args.provider,
-            "temperature": args.temperature,
-            "top_p": args.top_p,
+            "temperature": (
+                args.temperature
+                if args.temperature is not None
+                else 0.1
+            ),
+            "top_p": (
+                args.top_p
+                if args.top_p is not None
+                else 1.0
+            ),
             "workers": workers,
             "started_at": started_at,
             "dataset_hash": dataset_hash,
