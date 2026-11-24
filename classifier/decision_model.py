@@ -2215,6 +2215,7 @@ class GigaChatDecisionModel:
 
 {temp_first_intent}
 
+
 {temp_bussines}
 
 ## 8. ФОРМАТ ОТВЕТА
