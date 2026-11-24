@@ -35,6 +35,7 @@ CFG = {
 MODEL = "DeepSeek-V4.1-Flash" # "GigaChat-3.5-432B-A28B" 
 
 TEMPERATURE = 0.1
+TOP_P = 1.0
 MAX_TOKENS = 8000 # 512
 TIMEOUT = (60, 180)
 
@@ -77,6 +78,7 @@ class GigaChatClient:
             "temperature": TEMPERATURE,
             "max_tokens": MAX_TOKENS,
             "profanity_check": False,
+            "top_p": TOP_P,
         }
 
         headers = {
