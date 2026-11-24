@@ -683,6 +683,14 @@ def parse_args():
         help="Top-p для фиксации в метаданных.",
     )
 
+    parser.add_argument(
+        "--provider",
+        type=str,
+        choices=["auth", "direct"],
+        required=True,
+        help="Способ подключения к API: auth или direct.",
+    )
+
     args = parser.parse_args()
 
     if args.workers < 1:
@@ -776,6 +784,7 @@ def main() -> None:
         "duration_seconds": None,
 
         "model_name": args.model_name,
+        "provider": args.provider,
         "workers": workers,
         "temperature": args.temperature,
         "top_p": args.top_p,
@@ -808,6 +817,7 @@ def main() -> None:
     logger.info("Запуск эксперимента: %s", run_id)
     logger.info("Модель: %s", args.model_name)
     logger.info("Workers: %s", workers)
+    logger.info("Provider: %s", args.provider)
     logger.info("Temperature: %s", args.temperature)
     logger.info("Top-p: %s", args.top_p)
     logger.info("Датасет: %s", INPUT_PATH)
@@ -930,6 +940,10 @@ def main() -> None:
         metrics.update({
             "run_id": run_id,
             "model_name": args.model_name,
+            "provider": args.provider,
+            "temperature": args.temperature,
+            "top_p": args.top_p,
+            "workers": workers,
             "started_at": started_at,
             "dataset_hash": dataset_hash,
         })
@@ -1040,8 +1054,11 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
+# "GigaChat-3.5-432B-A28B"
+
 # python evaluate.py \
 #     --model-name "DeepSeek-V4.1-Flash" \
+#     --provider auth \
 #     --workers 20 \
 #     --temperature 0.2 \
 #     --top-p 0.9
